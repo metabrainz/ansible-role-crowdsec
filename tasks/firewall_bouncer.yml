@@ -1,0 +1,94 @@
+---
+- name: Install CrowdSec firewall bouncer
+  apt:
+    name: "{{ crowdsec_firewall_bouncer_packages }}"
+    state: present
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: List registered bouncers
+  command:
+    argv:
+      - cscli
+      - bouncers
+      - list
+      - --output
+      - json
+  delegate_to: "{{ crowdsec_server_inventory_hostname }}"
+  register: _crowdsec_bouncers
+  changed_when: false
+  ignore_errors: "{{ ansible_check_mode }}"
+  check_mode: false
+
+- name: Find bouncer registration
+  set_fact:
+    _crowdsec_bouncer: "{{ item }}"
+  loop: "{{ _crowdsec_bouncers.stdout | from_json }}"
+  loop_control:
+    label:
+      name: "{{ item.name | d() }}"
+      ip_address: "{{ item.ip_address | d() }}"
+      type: "{{ item.type | d() }}"
+      revoked: "{{ item.revoked | d() }}"
+  when: item.name == "ansible-" + inventory_hostname + "-firewall"
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Generate API key and register firewall bouncer
+  block:
+    - name: Generate API key
+      set_fact:
+        _crowdsec_bouncer_api_key: "{{ lookup('password', '/dev/null length=16 chars=hexdigits') }}"
+      changed_when: false
+
+    - name: Register firewall bouncer
+      command:
+        argv:
+          - cscli
+          - bouncers
+          - add
+          - "ansible-{{ inventory_hostname }}-firewall"
+          - --key
+          - "{{ _crowdsec_bouncer_api_key }}"
+      register: _crowdsec_cscli
+      delegate_to: "{{ crowdsec_server_inventory_hostname }}"
+      changed_when: true
+      ignore_errors: "{{ ansible_check_mode }}"
+
+  when: _crowdsec_bouncer is not defined
+
+- name: Retrieve existing firewall bouncer API key
+  block:
+    - name: Read CrowdSec firewall bouncer configuration
+      slurp:
+        src: /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml
+      register: _crowdsec_firewall_bouncer_config
+
+    - name: Extract API key from CrowdSec firewall bouncer configuration
+      set_fact:
+        _crowdsec_bouncer_api_key: >-
+          {{ (_crowdsec_firewall_bouncer_config.content | b64decode | from_yaml).api_key }}
+
+  when: _crowdsec_bouncer is defined
+
+- name: Combine CrowdSec firewall bouncer configuration variables
+  set_fact:
+    _crowdsec_firewall_bouncer_config: >-
+      {{ crowdsec_firewall_bouncer_config |
+      combine(crowdsec_group_firewall_bouncer_config, recursive=True) |
+      combine(crowdsec_host_firewall_bouncer_config, recursive=True) |
+      combine(dict(api_key=_crowdsec_bouncer_api_key)) }}
+
+- name: Install CrowdSec firewall bouncer configuration file
+  template:
+    src: etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml.j2
+    dest: /etc/crowdsec/bouncers/crowdsec-firewall-bouncer.yaml
+    mode: 0600
+    validate: /usr/sbin/crowdsec-firewall-bouncer -c %s -t
+  notify: restart crowdsec firewall bouncer
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Enable and start CrowdSec firewall bouncer
+  service:
+    name: crowdsec-firewall-bouncer
+    enabled: "{{ crowdsec_firewall_bouncer_service_enabled }}"
+    state: "{{ crowdsec_firewall_bouncer_service_state }}"
+  ignore_errors: "{{ ansible_check_mode }}"

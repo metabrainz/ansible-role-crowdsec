@@ -1,0 +1,136 @@
+---
+- name: Install required dependencies on Ubuntu >= 20.04
+  apt:
+    name: gnupg
+    state: present
+  when: ansible_distribution == 'Ubuntu' and ansible_distribution_version is version('20.04', '>=')
+
+- name: Install CrowdSec repository key
+  apt_key:
+    id: "6A89E3C2303A901A889971D3376ED5326E93CD0C"
+    url: "https://packagecloud.io/crowdsec/crowdsec/gpgkey"
+    keyring: "/etc/apt/trusted.gpg.d/crowdsec.gpg"
+    state: present
+
+- name: Install CrowdSec repository
+  apt_repository:
+    repo: >-
+      deb https://packagecloud.io/crowdsec/crowdsec/{{ ansible_distribution | lower }}
+      {{ ansible_distribution_release }} main
+    filename: crowdsec
+    state: present
+    update_cache: yes
+
+- name: Install CrowdSec
+  apt:
+    name: crowdsec
+    state: present
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Combine CrowdSec configuration variables
+  set_fact:
+    _crowdsec_config: >-
+      {{ crowdsec_config |
+      combine(crowdsec_group_config, recursive=True) |
+      combine(crowdsec_host_config, recursive=True) }}
+
+- name: Install CrowdSec configuration file
+  template:
+    src: etc/crowdsec/config.yaml.j2
+    dest: /etc/crowdsec/config.yaml
+    mode: 0644
+    validate: /usr/bin/crowdsec -c %s -t
+  notify: restart crowdsec
+
+- name: Install CrowdSec acquisitions, profiles and whitelist configuration
+  template:
+    src: "etc/crowdsec/{{ item }}.j2"
+    dest: "/etc/crowdsec/{{ item }}"
+    mode: 0644
+  loop:
+    - acquis.yaml
+    - profiles.yaml
+    - parsers/s02-enrich/ansible-whitelist.yaml
+  notify: restart crowdsec
+
+- name: Check age of hub index file
+  stat:
+    path: "{{ _crowdsec_config.config_paths.index_path }}"
+    get_checksum: no
+    get_mime: no
+  ignore_errors: true
+  register: _crowdsec_index
+  when: crowdsec_update_cache
+
+- name: Update hub index file if required
+  command:
+    cmd: cscli hub update
+  when: crowdsec_update_cache and
+    _crowdsec_index.stat.isreg is not defined or _crowdsec_index.stat.mtime <
+      (ansible_date_time.epoch|int - crowdsec_hub_cache_valid_time)
+
+- name: Install CrowdSec collections
+  command:
+    cmd: "cscli collections install {{ item.author }}/{{ item.name }}"
+    creates: "/etc/crowdsec/collections/{{ item.name }}.yaml"
+  loop: "{{ crowdsec_collections }}"
+  when: item.state | d("present") == "present"
+  notify: restart crowdsec
+
+- name: Remove CrowdSec collections
+  command:
+    cmd: "cscli collections remove {{ item.author }}/{{ item.name }}"
+    removes: "/etc/crowdsec/collections/{{ item.name }}.yaml"
+  loop: "{{ crowdsec_collections }}"
+  when: item.state | d("present") == "absent"
+  notify: restart crowdsec
+
+- name: Install CrowdSec parsers
+  command:
+    cmd: "cscli parsers install {{ item.author }}/{{ item.name }}"
+    creates: "/etc/crowdsec/parsers/*/{{ item.name }}.yaml"
+  loop: "{{ crowdsec_parsers }}"
+  when: item.state | d("present") == "present"
+  notify: restart crowdsec
+
+- name: Remove CrowdSec parsers
+  command:
+    cmd: "cscli parsers remove {{ item.author }}/{{ item.name }}"
+    removes: "/etc/crowdsec/parsers/*/{{ item.name }}.yaml"
+  loop: "{{ crowdsec_parsers }}"
+  when: item.state | d("present") == "absent"
+  notify: restart crowdsec
+
+- name: Install CrowdSec scenarios
+  command:
+    cmd: "cscli scenarios install {{ item.author }}/{{ item.name }}"
+    creates: "/etc/crowdsec/scenarios/{{ item.name }}.yaml"
+  loop: "{{ crowdsec_scenarios }}"
+  when: item.state | d("present") == "present"
+  notify: restart crowdsec
+
+- name: Remove CrowdSec scenarios
+  command:
+    cmd: "cscli scenarios remove {{ item.author }}/{{ item.name }}"
+    removes: "/etc/crowdsec/scenarios/{{ item.name }}.yaml"
+  loop: "{{ crowdsec_scenarios }}"
+  when: item.state | d("present") == "absent"
+  notify: restart crowdsec
+
+- name: Enable and start CrowdSec
+  service:
+    name: crowdsec
+    enabled: "{{ crowdsec_service_enabled }}"
+    state: "{{ crowdsec_service_state }}"
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Flush handlers to apply CrowdSec configuration
+  meta: flush_handlers
+
+- name: Register machine with CrowdSec server
+  include_tasks: register_machine.yml
+  when: crowdsec_server_inventory_hostname != inventory_hostname
+
+- name: Install and configure firewall bouncer
+  include_tasks: firewall_bouncer.yml
+  when: crowdsec_firewall_bouncer_enabled

@@ -1,0 +1,7 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+# {{ ansible_managed }}
+
+{% for acquisition in (crowdsec_acquisitions + crowdsec_group_acquisitions + crowdsec_host_acquisitions) %}
+{{ acquisition | to_nice_yaml(indent=2) -}}
+---
+{% endfor %}

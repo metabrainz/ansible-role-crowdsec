@@ -1,0 +1,37 @@
+---
+dependency:
+  name: galaxy
+driver:
+  name: docker
+platforms:
+  - &default_platform
+    name: server
+    image: "geerlingguy/docker-${MOLECULE_DISTRO:-ubuntu2004}-ansible:latest"
+    command: ${MOLECULE_DOCKER_COMMAND:-""}
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:ro
+    privileged: true
+    pre_build_image: true
+    groups:
+      - crowdsec_servers
+  - <<: *default_platform
+    name: client-1
+    groups:
+      - crowdsec_clients
+  - <<: *default_platform
+    name: client-2
+    groups:
+      - crowdsec_clients
+provisioner:
+  name: ansible
+  config_options:
+    diff:
+      always: True
+  playbooks:
+    converge: ${MOLECULE_PLAYBOOK:-converge.yml}
+  inventory:
+    links:
+      group_vars: inventory/group_vars/
+      host_vars: inventory/host_vars/
+verifier:
+  name: ansible

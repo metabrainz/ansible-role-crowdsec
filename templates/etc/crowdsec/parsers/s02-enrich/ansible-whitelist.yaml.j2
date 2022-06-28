@@ -1,0 +1,6 @@
+# {{ ansible_managed }}
+
+name: crowdsecurity/ansible-whitelist
+description: Ansible managed whitelist
+whitelist:
+{{ crowdsec_whitelist | to_nice_yaml(indent=2) | indent(2, true) -}}

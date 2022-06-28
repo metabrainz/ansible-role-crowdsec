@@ -1,0 +1,197 @@
+---
+crowdsec_service_enabled: true
+crowdsec_service_state: started
+crowdsec_firewall_bouncer_service_enabled: true
+crowdsec_firewall_bouncer_service_state: started
+
+crowdsec_firewall_bouncer_enabled: true
+
+crowdsec_packages:
+  - crowdsec
+crowdsec_firewall_bouncer_packages:
+  - crowdsec-firewall-bouncer-iptables
+
+crowdsec_server_inventory_hostname: "{{ inventory_hostname }}"
+crowdsec_api_server_enabled: "{{ crowdsec_server_inventory_hostname == inventory_hostname }}"
+crowdsec_api_url: http://127.0.0.1:8080/
+crowdsec_update_cache: true
+crowdsec_hub_cache_valid_time: 900
+
+crowdsec_config:
+  common:
+    daemonize: true
+    log_media: file
+    log_level: info
+    log_dir: /var/log/
+    log_max_size: 20
+    compress_logs: true
+    log_max_files: 10
+    working_dir: .
+  config_paths:
+    config_dir: /etc/crowdsec/
+    data_dir: /var/lib/crowdsec/data/
+    simulation_path: /etc/crowdsec/simulation.yaml
+    hub_dir: /etc/crowdsec/hub/
+    index_path: /etc/crowdsec/hub/.index.json
+    notification_dir: /etc/crowdsec/notifications/
+    plugin_dir: /usr/lib/crowdsec/plugins/
+  crowdsec_service:
+    acquisition_path: /etc/crowdsec/acquis.yaml
+    parser_routines: 1
+  cscli:
+    output: human
+  db_config:
+    log_level: info
+    type: sqlite
+    db_path: /var/lib/crowdsec/data/crowdsec.db
+    #max_open_conns: 100
+    #user:
+    #password:
+    #db_name:
+    #host:
+    #port:
+    flush:
+      max_items: 5000
+      max_age: 7d
+  plugin_config:
+    user: nobody # plugin process would be ran on behalf of this user
+    group: nogroup # plugin process would be ran on behalf of this group
+  api:
+    client:
+      insecure_skip_verify: false
+      credentials_path: /etc/crowdsec/local_api_credentials.yaml
+    server:
+      log_level: info
+      listen_uri: 127.0.0.1:8080
+      profiles_path: /etc/crowdsec/profiles.yaml
+      console_path: /etc/crowdsec/console.yaml
+      online_client: # Central API credentials (to push signals and receive bad IPs)
+        credentials_path: /etc/crowdsec/online_api_credentials.yaml
+      trusted_ips: # IP ranges, or IPs which can have admin API access
+        - 127.0.0.1
+        - ::1
+      #tls:
+        #cert_file: /etc/crowdsec/ssl/cert.pem
+        #key_file: /etc/crowdsec/ssl/key.pem
+  prometheus:
+    enabled: true
+    level: full
+    listen_addr: 127.0.0.1
+    listen_port: 6060
+crowdsec_group_config: {}
+crowdsec_host_config: {}
+
+# https://doc.crowdsec.net/docs/profiles/format
+crowdsec_profiles:
+  - name: default_ip_remediation
+    #debug: true
+    filters:
+      - Alert.Remediation == true && Alert.GetScope() == "Ip"
+    decisions:
+      - type: ban
+        duration: 4h
+    # notifications:
+    #   - slack_default  # Set the webhook in /etc/crowdsec/notifications/slack.yaml before enabling this.
+    #   - splunk_default # Set the splunk url and token in /etc/crowdsec/notifications/splunk.yaml before enabling this.
+    #   - http_default   # Set the required http parameters in /etc/crowdsec/notifications/http.yaml before enabling this.
+    #   - email_default  # Set the required email parameters in /etc/crowdsec/notifications/email.yaml before enabling this.
+    on_success: break
+crowdsec_group_profiles: []
+crowdsec_host_profiles: []
+
+# https://doc.crowdsec.net/docs/data_sources/intro
+crowdsec_acquisitions:
+  - filenames:
+      - /var/log/auth.log
+    labels:
+      type: syslog
+  - filenames:
+      - /var/log/syslog
+      - /var/log/kern.log
+    labels:
+      type: syslog
+crowdsec_group_acquisitions: []
+crowdsec_host_acquisitions: []
+
+crowdsec_firewall_bouncer_config:
+  mode: iptables
+  pid_dir: /var/run/
+  update_frequency: 10s
+  daemonize: true
+  log_mode: file
+  log_dir: /var/log/
+  log_level: info
+  log_compression: true
+  log_max_size: 100
+  log_max_backups: 3
+  log_max_age: 30
+  api_url: "{{ crowdsec_api_url }}"
+  insecure_skip_verify: false
+  disable_ipv6: false
+  deny_action: DROP
+  deny_log: false
+  supported_decisions_types:
+    - ban
+  #to change log prefix
+  #deny_log_prefix: "crowdsec: "
+  #to change the blacklists name
+  blacklists_ipv4: crowdsec-blacklists
+  blacklists_ipv6: crowdsec6-blacklists
+  #if present, insert rule in those chains
+  iptables_chains:
+    - INPUT
+  #  - FORWARD
+  #  - DOCKER-USER
+
+  ## nftables
+  nftables:
+    ipv4:
+      enabled: true
+      set-only: false
+      table: crowdsec
+      chain: crowdsec-chain
+    ipv6:
+      enabled: true
+      set-only: false
+      table: crowdsec6
+      chain: crowdsec6-chain
+  # packet filter
+  pf:
+    # an empty string disables the anchor
+    anchor_name: ""
+crowdsec_group_firewall_bouncer_config: {}
+crowdsec_host_firewall_bouncer_config: {}
+
+crowdsec_collections:
+  - name: sshd
+    author: crowdsecurity
+    state: present
+  - name: linux
+    author: crowdsecurity
+    state: present
+
+#crowdsec_scenarios:
+#  - name: apache_log4j2_cve-2021-44228
+#    author: crowdsecurity
+#    state: present
+crowdsec_scenarios: []
+
+#crowdsec_parsers:
+#  - name: apache2-logs
+#    author: crowdsecurity
+#    state: present
+crowdsec_parsers: []
+
+# NOTE: empty values for the IP / cidr / expression keys will cause CrowdSec to
+# error on startup
+crowdsec_whitelist:
+  reason: "Ansible managed whitelist"
+  ip:
+    - 127.0.0.1
+    - ::1
+#  cidr:
+#    - 192.168.0.0/16
+#    - 10.0.0.0/8
+#    - 172.16.0.0/12
+#  expression:
+#    - evt.Enriched.IsoCode == 'FR'

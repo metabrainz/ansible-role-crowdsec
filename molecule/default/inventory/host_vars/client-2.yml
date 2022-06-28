@@ -1,0 +1,5 @@
+---
+crowdsec_scenarios:
+  - name: apache_log4j2_cve-2021-44228
+    author: crowdsecurity
+    state: present

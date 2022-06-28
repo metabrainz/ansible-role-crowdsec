@@ -1,0 +1,9 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+# {{ ansible_managed }}
+
+{% for profile in (crowdsec_host_profiles + crowdsec_group_profiles + crowdsec_profiles) %}
+{{ profile | to_nice_yaml(indent=2) -}}
+{%   if loop.length > 1 and not loop.last %}
+---
+{%   endif %}
+{% endfor %}

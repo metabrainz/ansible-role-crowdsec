@@ -1,0 +1,21 @@
+---
+- name: Restart CrowdSec
+  listen: restart crowdsec
+  service:
+    name: crowdsec
+    state: restarted
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Restart CrowdSec firewall bouncer
+  listen: restart crowdsec firewall bouncer
+  service:
+    name: crowdsec-firewall-bouncer
+    state: restarted
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Reload SystemD and restart Crowdsec
+  listen: reload systemd and restart crowdsec
+  systemd:
+    daemon_reload: yes
+  when: ansible_service_mgr == "systemd"
+  notify: restart crowdsec

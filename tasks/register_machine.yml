@@ -1,0 +1,50 @@
+---
+- name: List registered machines
+  command:
+    argv:
+      - cscli
+      - machines
+      - list
+      - -o
+      - json
+  delegate_to: "{{ crowdsec_server_inventory_hostname }}"
+  register: _crowdsec_machines
+  changed_when: false
+  ignore_errors: "{{ ansible_check_mode }}"
+  check_mode: false
+
+- name: Find machine registration
+  set_fact:
+    _crowdsec_machine: "{{ item }}"
+  loop: "{{ _crowdsec_machines.stdout | from_json }}"
+  loop_control:
+    label:
+      machineId: "{{ item.machineId | d() }}"
+      isValidated: "{{ item.isValidated | d() }}"
+  when: item.machineId|d() == inventory_hostname
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Register machine
+  command:
+    argv:
+      - cscli
+      - lapi
+      - register
+      - -u
+      - "{{ crowdsec_api_url }}"
+      - --machine
+      - "{{ inventory_hostname }}"
+  when: _crowdsec_machine is not defined
+  notify: restart crowdsec
+  ignore_errors: "{{ ansible_check_mode }}"
+
+- name: Validate machine
+  command:
+    argv:
+      - cscli
+      - machines
+      - validate
+      - "{{ inventory_hostname }}"
+  delegate_to: "{{ crowdsec_server_inventory_hostname }}"
+  when: not _crowdsec_machine.isValidated|d()
+  ignore_errors: "{{ ansible_check_mode }}"

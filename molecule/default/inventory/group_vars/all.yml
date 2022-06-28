@@ -1,0 +1,8 @@
+---
+crowdsec_collections:
+  - name: sshd
+    author: crowdsecurity
+    state: present
+  - name: linux
+    author: crowdsecurity
+    state: present

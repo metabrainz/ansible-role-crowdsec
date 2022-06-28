@@ -1,0 +1,4 @@
+---
+crowdsec_server_inventory_hostname: server
+crowdsec_api_url: >-
+  http://{{ hostvars[crowdsec_server_inventory_hostname].ansible_default_ipv4.address }}:8080/

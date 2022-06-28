@@ -1,0 +1,9 @@
+---
+crowdsec_group_config:
+  api:
+    server:
+      listen_uri: 0.0.0.0:8080
+      online_client:
+        credentials_path: ""
+
+crowdsec_firewall_bouncer_enabled: false

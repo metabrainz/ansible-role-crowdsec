@@ -1,0 +1,104 @@
+---
+- name: Verify
+  hosts: all
+  gather_facts: false
+  tasks:
+    - name: "Block an IP on server"
+      command:
+        argv:
+          - cscli
+          - decisions
+          - add
+          - --ip
+          - 42.42.42.42
+      when: inventory_hostname == "server"
+
+    - name: "Block an IP on client-1"
+      command:
+        argv:
+          - cscli
+          - decisions
+          - add
+          - --ip
+          - 24.24.24.24
+      when: inventory_hostname == "client-1"
+
+    - name: Wait for updates to propagate
+      pause:
+        seconds: 10
+
+    - name: Ensure CrowdSec service is running
+      service:
+        name: crowdsec
+        state: started
+      check_mode: true
+      register: _crowdsec_service
+      failed_when: _crowdsec_service.changed
+
+    - name: Ensure CrowdSec firewall bouncer service is running on clients
+      service:
+        name: crowdsec-firewall-bouncer
+        state: started
+      check_mode: true
+      register: _crowdsec_service
+      failed_when: _crowdsec_service.changed
+      when: inventory_hostname in groups["crowdsec_clients"]
+
+    - name: Ensure CrowdSec firewall bouncer service is not installed on the server
+      apt:
+        name: crowdsec-firewall-bouncer
+        state: absent
+      check_mode: true
+      register: _crowdsec_apt
+      failed_when: _crowdsec_apt.changed
+      when: inventory_hostname in groups["crowdsec_servers"]
+
+    - name: Ensure IP blocked on server has propagated to clients
+      command:
+        argv:
+          - ipset
+          - test
+          - crowdsec-blacklists
+          - 42.42.42.42
+      when: inventory_hostname in groups["crowdsec_clients"]
+
+    - name: Ensure IP blocked on client-1 has propagated to clients
+      command:
+        argv:
+          - ipset
+          - test
+          - crowdsec-blacklists
+          - 24.24.24.24
+      when: inventory_hostname in groups["crowdsec_clients"]
+
+    - name: Check installed scenarios on client-2
+      block:
+        - name: List installed scenarios on client-2
+          command:
+            argv:
+              - cscli
+              - scenarios
+              - list
+              - -o
+              - json
+          register: _client2_scenarios
+          changed_when: false
+
+        - name: Parse installed scenarios on client-2
+          set_fact:
+            client2_log4j_scenario: "{{ item }}"
+          loop: "{{ (_client2_scenarios.stdout | from_json).scenarios }}"
+          loop_control:
+            label:
+              name: "{{ item.name }}"
+              description: "{{ item.description | d(omit) }}"
+              status: "{{ item.status }}"
+          when: item.name | d() == "crowdsecurity/apache_log4j2_cve-2021-44228"
+          changed_when: false
+
+        - name: Ensure apache_log4j2_cve-2021-44228 scenario is installed on client-2
+          fail:
+            msg: "apache_log4j2_cve-2021-44228 scenario is not installed"
+          when: client2_log4j_scenario is not defined
+
+      when: inventory_hostname == "client-2"

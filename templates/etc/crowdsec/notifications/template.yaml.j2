@@ -1,0 +1,4 @@
+#jinja2: trim_blocks: True, lstrip_blocks: True
+# {{ ansible_managed }}
+
+{{ item.value | to_nice_yaml(indent=2, width=9999) }}
