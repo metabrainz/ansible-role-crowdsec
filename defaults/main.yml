@@ -4,6 +4,7 @@ crowdsec_service_state: started
 crowdsec_firewall_bouncer_service_enabled: true
 crowdsec_firewall_bouncer_service_state: started
 
+crowdsec_install_bash_completion: false
 crowdsec_firewall_bouncer_enabled: true
 
 crowdsec_packages:

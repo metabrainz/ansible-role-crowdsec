@@ -3,29 +3,6 @@
   hosts: all
   gather_facts: false
   tasks:
-    - name: "Block an IP on server"
-      command:
-        argv:
-          - cscli
-          - decisions
-          - add
-          - --ip
-          - 42.42.42.42
-      when: inventory_hostname == "server"
-
-    - name: "Block an IP on client-1"
-      command:
-        argv:
-          - cscli
-          - decisions
-          - add
-          - --ip
-          - 24.24.24.24
-      when: inventory_hostname == "client-1"
-
-    - name: Wait for updates to propagate
-      pause:
-        seconds: 10
 
     - name: Ensure CrowdSec service is running
       service:
@@ -52,6 +29,42 @@
       register: _crowdsec_apt
       failed_when: _crowdsec_apt.changed
       when: inventory_hostname in groups["crowdsec_servers"]
+
+    - name: Ensure bash completion is installed on the server
+      stat:
+        path: /etc/bash_completion.d/cscli
+        get_attributes: false
+        get_checksum: false
+        get_mime: false
+      check_mode: true
+      register: result
+      failed_when: result.stat.isreg is not defined or not result.stat.isreg or
+        result.stat.size == 0
+      when: inventory_hostname in groups["crowdsec_servers"]
+
+    - name: "Block an IP on server"
+      command:
+        argv:
+          - cscli
+          - decisions
+          - add
+          - --ip
+          - 42.42.42.42
+      when: inventory_hostname == "server"
+
+    - name: "Block an IP on client-1"
+      command:
+        argv:
+          - cscli
+          - decisions
+          - add
+          - --ip
+          - 24.24.24.24
+      when: inventory_hostname == "client-1"
+
+    - name: Wait for updates to propagate
+      pause:
+        seconds: 10
 
     - name: Ensure IP blocked on server has propagated to clients
       command:

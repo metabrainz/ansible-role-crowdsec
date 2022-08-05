@@ -7,3 +7,4 @@ crowdsec_group_config:
         credentials_path: ""
 
 crowdsec_firewall_bouncer_enabled: false
+crowdsec_install_bash_completion: true

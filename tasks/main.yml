@@ -27,6 +27,22 @@
     state: present
   ignore_errors: "{{ ansible_check_mode }}"
 
+- name: Create Bash completion directory
+  file:
+    path: /etc/bash_completion.d
+    owner: root
+    group: root
+    mode: 0755
+    state: directory
+  when: crowdsec_install_bash_completion
+
+- name: Install CrowdSec Bash completion file
+  shell:
+    chdir: /etc/bash_completion.d
+    cmd: cscli completion bash > cscli
+    creates: /etc/bash_completion.d/cscli
+  when: crowdsec_install_bash_completion
+
 - name: Combine CrowdSec configuration variables
   set_fact:
     _crowdsec_config: >-
